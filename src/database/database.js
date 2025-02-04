@@ -60,8 +60,17 @@ class DB {
     try {
       const userResult = await this.query(connection, `SELECT * FROM user WHERE email=?`, [email]);
       const user = userResult[0];
-      if (!user || !(await bcrypt.compare(password, user.password))) {
-        throw new StatusCodeError('unknown user', 404);
+
+      if (userResult.length === 0) {
+        console.log("User not found:", email);
+        throw new StatusCodeError("User does not exist", 404);
+      }
+
+      const passwordMatches = await bcrypt.compare(password, user.password);
+
+      if (!passwordMatches) {
+          console.log("Invalid password for user:", email);
+          throw new StatusCodeError("unauthorized", 401);
       }
 
       const roleResult = await this.query(connection, `SELECT * FROM userRole WHERE userId=?`, [user.id]);
@@ -90,11 +99,30 @@ class DB {
         const query = `UPDATE user SET ${params.join(', ')} WHERE id=${userId}`;
         await this.query(connection, query);
       }
-      return this.getUser(email, password);
+      return this.getUserById(userId);
+      // return this.getUser(email, password);
     } finally {
       connection.end();
     }
   }
+
+  async getUserById(userId) {
+    const connection = await this.getConnection();
+    try {
+        const userResult = await this.query(connection, `SELECT * FROM user WHERE id=?`, [userId]);
+        const user = userResult[0];
+        if (!user) {
+            throw new StatusCodeError('User not found', 404);
+        }
+
+        const roleResult = await this.query(connection, `SELECT * FROM userRole WHERE userId=?`, [user.id]);
+        const roles = roleResult.map((r) => ({ objectId: r.objectId || undefined, role: r.role }));
+
+        return { ...user, roles, password: undefined };
+    } finally {
+        connection.end();
+    }
+}
 
   async loginUser(userId, token) {
     token = this.getTokenSignature(token);
