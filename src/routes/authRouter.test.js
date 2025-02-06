@@ -10,13 +10,14 @@ if (process.env.VSCODE_INSPECTOR_OPTIONS) {
 
 const testUser = { name: 'pizza diner', email: 'reg@test.com', password: 'a' };
 let testUserAuthToken;
+let testUserId;
 let adminAuthToken;
 
 beforeAll(async () => {
   testUser.email = Math.random().toString(36).substring(2, 12) + '@test.com';
   const registerRes = await request(app).post('/api/auth').send(testUser);
   testUserAuthToken = registerRes.body.token;
-  testUserID = registerRes.body.user.id;
+  testUserId = registerRes.body.user.id;
   expectValidJwt(testUserAuthToken);
 });
 
@@ -64,7 +65,7 @@ test('UpdateUser with success', async () => {
     const updatedPassword = `${randomName()}`;
 
     const updateRes = await request(app)
-        .put(`/api/auth/${testUserID}`)
+        .put(`/api/auth/${testUserId}`)
         .set("Authorization", `Bearer ${adminAuthToken}`)
         .send({ email: updatedEmail, password: updatedPassword });
 
@@ -75,13 +76,13 @@ test('UpdateUser with success', async () => {
 test('UpdateUser with user without admin permission', async () => {
     const secondUser = await createDinerUser();
     const secondUserLoginRes = await request(app).put('/api/auth').send(secondUser)
-    secondUserAuthToken = secondUserLoginRes.body.token;
+    let secondUserAuthToken = secondUserLoginRes.body.token;
 
     const updatedEmail = `${randomName()}@updated.com`;
     const updatedPassword = `${randomName()}`;
 
     const updateRes = await request(app)
-        .put(`/api/auth/${testUserID}`)
+        .put(`/api/auth/${testUserId}`)
         .set("Authorization", `Bearer ${secondUserAuthToken}`)
         .send({ email: updatedEmail, password: updatedPassword });
 
@@ -93,17 +94,17 @@ test('UpdateUser without authtoken', async () => {
     const updatedPassword = `${randomName()}`;
 
     const updateRes = await request(app)
-        .put(`/api/auth/${testUserID}`)
+        .put(`/api/auth/${testUserId}`)
         .send({ email: updatedEmail, password: updatedPassword});
 
     expect(updateRes.status).toBe(401);
 });
 
 test('UpdateUser without expired token', async () => {
-    const expiredToken = jwt.sign({ id: testUserID }, config.jwtSecret, { expiresIn: '-10s' });
+    const expiredToken = jwt.sign({ id: testUserId }, config.jwtSecret, { expiresIn: '-10s' });
 
     const res = await request(app)
-        .put(`/api/auth/${testUserID}`)
+        .put(`/api/auth/${testUserId}`)
         .set("Authorization", `Bearer ${expiredToken}`)
         .send({ email: "shouldfail@example.com" });
 

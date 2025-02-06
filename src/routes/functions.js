@@ -1,6 +1,4 @@
 const { Role, DB } = require('../database/database.js');
-const request = require('supertest');
-const app = require('../service');
 
 async function createDinerUser() {
     let user = { password: 'toomanysecrets', roles: [{ role: Role.Diner }] };

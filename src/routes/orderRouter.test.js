@@ -17,7 +17,6 @@ beforeAll(async () => {
   testUser.email = Math.random().toString(36).substring(2, 12) + '@test.com';
   const registerRes = await request(app).post('/api/auth').send(testUser);
   testUserAuthToken = registerRes.body.token;
-  testUserID = registerRes.body.user.id;
   testUserEmail = registerRes.body.user.email;
   expectValidJwt(testUserAuthToken);
 });
@@ -46,7 +45,7 @@ test('addMenuItem with success', async () => {
 test('addMenuItem without proper admin permission', async () => {
   const secondUser = await createDinerUser();
   const secondUserLoginRes = await request(app).put('/api/auth').send(secondUser)
-  secondUserAuthToken = secondUserLoginRes.body.token;
+  let secondUserAuthToken = secondUserLoginRes.body.token;
 
   const item = {title: randomName(), description: randomName(), image: "pizza1.png", price: 0.0001};
 
@@ -98,18 +97,6 @@ test('createOrder without proper order', async () => {
   const testAdminUser = await createAdminUser();
   const adminLoginRes = await request(app).put('/api/auth').send(testAdminUser)
   adminAuthToken = adminLoginRes.body.token;
-
-  const originalTitle = randomName();
-  const originalDescription = randomName();
-  const item = {title: originalTitle, description: originalDescription, image: "pizza1.png", price: 0.0001};
-  const addRet = await DB.addMenuItem(item);
-
-  // const testFranchise = {name: randomName(), admins: [{email: adminLoginRes.body.email}]};
-  const testFranchise = {"name": randomName(), "admins": [{"email": testUserEmail}]};
-  const createFranchiseRet = await DB.createFranchise(testFranchise);
-
-  const testStore = { franchiseId: createFranchiseRet.id, name: randomName() };
-  const createStoreRet = await DB.createStore(createFranchiseRet.id, testStore);
 
   const menuItem = {
     menuId: undefined, 
