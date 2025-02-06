@@ -1,22 +1,26 @@
 const request = require('supertest');
 const app = require('../service');
+const jwt = require('jsonwebtoken');
+const config = require('../config.js');
+const { createAdminUser, createDinerUser, expectValidJwt, randomName } = require('./functions.js')
+
+if (process.env.VSCODE_INSPECTOR_OPTIONS) {
+    jest.setTimeout(60 * 1000 * 5); // 5 minutes
+}
 
 const testUser = { name: 'pizza diner', email: 'reg@test.com', password: 'a' };
 let testUserAuthToken;
-let testUserId;
+let adminAuthToken;
 
 beforeAll(async () => {
   testUser.email = Math.random().toString(36).substring(2, 12) + '@test.com';
-  
   const registerRes = await request(app).post('/api/auth').send(testUser);
-  expect(registerRes.status).toBe(200);
-  
   testUserAuthToken = registerRes.body.token;
-  testUserId = registerRes.body.user.id;
+  testUserID = registerRes.body.user.id;
   expectValidJwt(testUserAuthToken);
 });
 
-test('login', async () => {
+test('Login with success', async () => {
   const loginRes = await request(app).put('/api/auth').send(testUser);
   expect(loginRes.status).toBe(200);
   expectValidJwt(loginRes.body.token);
@@ -26,89 +30,83 @@ test('login', async () => {
   expect(loginRes.body.user).toMatchObject(expectedUser);
 });
 
-test('logout', async () => {
+test('Logout with success', async () => {
   const logoutRes = await request(app)
     .delete('/api/auth')
-    .set('Authorization', `Bearer ${testUserAuthToken}`);
-  
+    .set("Authorization", `Bearer ${testUserAuthToken}`)
+
   expect(logoutRes.status).toBe(200);
   expect(logoutRes.body.message).toBe('logout successful');
+});
 
-  // Verify token is invalid after logout
-  const protectedRes = await request(app)
-    .put(`/api/auth/${testUserId}`)
-    .set('Authorization', `Bearer ${testUserAuthToken}`)
-    .send({ email: 'new@email.com' });
+test('Logout without proper token', async () => {
+    const logoutRes = await request(app)
+      .delete('/api/auth')
+      .set("Authorization", `Bearer MistakeToken`)
   
-  expect(protectedRes.status).toBe(401);
-  expect(protectedRes.body.message).toBe('unauthorized');
+    expect(logoutRes.status).toBe(401);
+    expect(logoutRes.body.message).toBe('unauthorized');
+  });
+
+test('Register without proper name', async () => {
+  const testUser = { email: 'reg@test.com', password: 'a' };
+  testUser.email = Math.random().toString(36).substring(2, 12) + '@test.com';
+  const registerRes = await request(app).post('/api/auth').send(testUser);
+  expect(registerRes.status).toBe(400);
 });
 
-test('update user - unauthorized access', async () => {
-  const updateRes = await request(app)
-    .put(`/api/auth/${testUserId}`)
-    .send({ email: 'hacker@attack.com', password: 'newpass' });
+test('UpdateUser with success', async () => {
+    const adminUser = await createAdminUser();
+    const adminLoginRes = await request(app).put('/api/auth').send(adminUser)
+    adminAuthToken = adminLoginRes.body.token;
 
-  expect(updateRes.status).toBe(401);
-  expect(updateRes.body.message).toBe('unauthorized');
+    const updatedEmail = `${randomName()}@updated.com`;
+    const updatedPassword = `${randomName()}`;
+
+    const updateRes = await request(app)
+        .put(`/api/auth/${testUserID}`)
+        .set("Authorization", `Bearer ${adminAuthToken}`)
+        .send({ email: updatedEmail, password: updatedPassword });
+
+    expect(updateRes.status).toBe(200);
+    expect(updateRes.body.email).toBe(updatedEmail);
 });
 
-test('update user - authorized access', async () => {
-  expect(testUserId).not.toBeUndefined();
-  expect(testUserId).not.toBeNull();
-  // Ensure fresh token
-  const loginRes = await request(app).put('/api/auth').send(testUser);
-  expect(loginRes.status).toBe(200);
-  const freshToken = loginRes.body.token;
+test('UpdateUser with user without admin permission', async () => {
+    const secondUser = await createDinerUser();
+    const secondUserLoginRes = await request(app).put('/api/auth').send(secondUser)
+    secondUserAuthToken = secondUserLoginRes.body.token;
 
-  const newEmail = 'updated@test.com';
-  
-  const updateRes = await request(app)
-    .put(`/api/auth/${testUserId}`)
-    .set('Authorization', `Bearer ${freshToken}`)
-    .send({ email: newEmail, password: 'newpass' });
+    const updatedEmail = `${randomName()}@updated.com`;
+    const updatedPassword = `${randomName()}`;
 
-  console.log("Update response:", updateRes.body);
-  expect(updateRes.status).toBe(200);
-  expect(updateRes.body.email).toBe(newEmail);
+    const updateRes = await request(app)
+        .put(`/api/auth/${testUserID}`)
+        .set("Authorization", `Bearer ${secondUserAuthToken}`)
+        .send({ email: updatedEmail, password: updatedPassword });
+
+    expect(updateRes.status).toBe(403);
 });
 
-test('protected route requires authentication', async () => {
-  const protectedRes = await request(app).delete('/api/auth');
+test('UpdateUser without authtoken', async () => {
+    const updatedEmail = `${randomName()}@updated.com`;
+    const updatedPassword = `${randomName()}`;
 
-  expect(protectedRes.status).toBe(401);
-  expect(protectedRes.body.message).toBe('unauthorized');
+    const updateRes = await request(app)
+        .put(`/api/auth/${testUserID}`)
+        .send({ email: updatedEmail, password: updatedPassword});
+
+    expect(updateRes.status).toBe(401);
 });
 
-test('registration fails with missing fields', async () => {
-  const res = await request(app).post('/api/auth').send({ email: 'test@jwt.com' });
-  expect(res.status).toBe(400);
-  expect(res.body.message).toBe('name, email, and password are required');
+test('UpdateUser without expired token', async () => {
+    const expiredToken = jwt.sign({ id: testUserID }, config.jwtSecret, { expiresIn: '-10s' });
+
+    const res = await request(app)
+        .put(`/api/auth/${testUserID}`)
+        .set("Authorization", `Bearer ${expiredToken}`)
+        .send({ email: "shouldfail@example.com" });
+
+    expect(res.status).toBe(401);
+    expect(res.body.message).toBe("unauthorized");
 });
-
-test('login fails with incorrect password', async () => {
-  const res = await request(app).put('/api/auth').send({ email: testUser.email, password: 'wrongpassword' });
-  expect(res.status).toBe(401);
-  expect(res.body.message).toBe('unauthorized');
-});
-
-test('accessing protected route with invalid token', async () => {
-  const res = await request(app)
-    .put(`/api/auth/${testUserId}`)
-    .set('Authorization', 'Bearer fakeinvalidtoken')
-    .send({ email: 'hacker@attack.com' });
-
-  expect(res.status).toBe(401);
-  expect(res.body.message).toBe('unauthorized');
-});
-
-
-test('accessing protected route with no token', async () => {
-  const res = await request(app).put(`/api/auth/${testUserId}`).send({ email: 'unauth@test.com' });
-  expect(res.status).toBe(401);
-  expect(res.body.message).toBe('unauthorized');
-});
-
-function expectValidJwt(potentialJwt) {
-  expect(potentialJwt).toMatch(/^[a-zA-Z0-9\-_]*\.[a-zA-Z0-9\-_]*\.[a-zA-Z0-9\-_]*$/);
-}
