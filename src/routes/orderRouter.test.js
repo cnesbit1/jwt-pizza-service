@@ -1,5 +1,7 @@
 const request = require('supertest');
 const app = require('../service');
+const { DB } = require('../database/database.js');
+
 const { createAdminUser, createDinerUser, expectValidJwt, randomName } = require('./functions.js')
 
 if (process.env.VSCODE_INSPECTOR_OPTIONS) {
@@ -9,18 +11,15 @@ if (process.env.VSCODE_INSPECTOR_OPTIONS) {
 const testUser = { name: 'pizza diner', email: 'reg@test.com', password: 'a' };
 let testUserAuthToken;
 let adminAuthToken;
-let dinerAuthToken;
+let testUserEmail;
 
 beforeAll(async () => {
   testUser.email = Math.random().toString(36).substring(2, 12) + '@test.com';
   const registerRes = await request(app).post('/api/auth').send(testUser);
   testUserAuthToken = registerRes.body.token;
   testUserID = registerRes.body.user.id;
+  testUserEmail = registerRes.body.user.email;
   expectValidJwt(testUserAuthToken);
-
-  // testDinerUser = createDinerUser();
-  // const dinerLoginRes = await request(app).put('/api/auth').send(testDinerUser)
-  // dinerAuthToken = dinerLoginRes.body.token;
 });
 
 test('getMenu with success', async () => {
@@ -58,21 +57,76 @@ test('addMenuItem without proper admin permission', async () => {
   expect(addRes.status).toBe(403);
 });
 
-test('getOrder with success', async () => {
+test('createOrder with success', async () => {
   const testAdminUser = await createAdminUser();
   const adminLoginRes = await request(app).put('/api/auth').send(testAdminUser)
   adminAuthToken = adminLoginRes.body.token;
 
-  const item = {title: randomName(), description: randomName(), image: "pizza1.png", price: 0.0001};
+  const originalTitle = randomName();
+  const originalDescription = randomName();
+  const item = {title: originalTitle, description: originalDescription, image: "pizza1.png", price: 0.0001};
+  const addRet = await DB.addMenuItem(item);
 
-  const addRes = await request(app).put('/api/order/menu')
-    .set('Content-Type', 'application/json')
-    .set("Authorization", `Bearer ${adminAuthToken}`)
-    .send(item);
+  // const testFranchise = {name: randomName(), admins: [{email: adminLoginRes.body.email}]};
+  const testFranchise = {"name": randomName(), "admins": [{"email": testUserEmail}]};
+  const createFranchiseRet = await DB.createFranchise(testFranchise);
 
-  expect(addRes.status).toBe(200);
+  const testStore = { franchiseId: createFranchiseRet.id, name: randomName() };
+  const createStoreRet = await DB.createStore(createFranchiseRet.id, testStore);
+
+  const menuItem = {
+    menuId: addRet.id, 
+    description: addRet.description, 
+    price: addRet.price
+  };
+
+  const order = {
+    franchiseId: createFranchiseRet.id, 
+    storeId: createStoreRet.id, 
+    items: [menuItem]
+  };
+
+  const orderRes = await request(app).post('/api/order')
+  .set("Content-Type", "application/json")
+  .set("Authorization", `Bearer ${adminAuthToken}`)
+  .send(order);
+
+  expect(orderRes.status).toBe(200);
 });
 
-test('createOrder with success', async () => {
+test('createOrder without proper order', async () => {
+  const testAdminUser = await createAdminUser();
+  const adminLoginRes = await request(app).put('/api/auth').send(testAdminUser)
+  adminAuthToken = adminLoginRes.body.token;
 
+  const originalTitle = randomName();
+  const originalDescription = randomName();
+  const item = {title: originalTitle, description: originalDescription, image: "pizza1.png", price: 0.0001};
+  const addRet = await DB.addMenuItem(item);
+
+  // const testFranchise = {name: randomName(), admins: [{email: adminLoginRes.body.email}]};
+  const testFranchise = {"name": randomName(), "admins": [{"email": testUserEmail}]};
+  const createFranchiseRet = await DB.createFranchise(testFranchise);
+
+  const testStore = { franchiseId: createFranchiseRet.id, name: randomName() };
+  const createStoreRet = await DB.createStore(createFranchiseRet.id, testStore);
+
+  const menuItem = {
+    menuId: undefined, 
+    description: undefined, 
+    price: undefined
+  };
+
+  const order = {
+    franchiseId: undefined, 
+    storeId: undefined, 
+    items: menuItem
+  };
+
+  const orderRes = await request(app).post('/api/order')
+  .set("Content-Type", "application/json")
+  .set("Authorization", `Bearer ${adminAuthToken}`)
+  .send(order);
+
+  expect(orderRes.status).toBe(500);
 });
