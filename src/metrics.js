@@ -40,13 +40,6 @@ function sendMetricToGrafana(metricName, metricValue, attributes = {}) {
 
   const line = `${metricName},${tagString} value=${metricValue} ${timestamp}`;
 
-  //   console.log(`\n Sending Metric → ${metricName}`);
-  //   console.log(`   Value: ${metricValue}`);
-  //   if (Object.keys(attributes).length > 0) {
-  //     console.log(`   Tags: ${JSON.stringify(attributes)}`);
-  //   }
-  //   console.log(`   Line Protocol: ${line}\n`);
-
   fetch(config.metrics.url, {
     method: "POST",
     headers: {
@@ -56,18 +49,7 @@ function sendMetricToGrafana(metricName, metricValue, attributes = {}) {
       "Content-Type": "text/plain",
     },
     body: line,
-  })
-    .then(async (res) => {
-      if (!res.ok) {
-        const text = await res.text();
-        // console.error("Failed to push to Influx:", res.status, text);
-      } else {
-        // console.log(`Successfully pushed ${metricName}`);
-      }
-    })
-    .catch((err) => {
-      //   console.error("Error pushing to Influx:", err);
-    });
+  }).catch(() => {});
 }
 
 function requestTracker(req, res, next) {
