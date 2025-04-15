@@ -116,17 +116,28 @@ class DB {
   async updateUser(userId, email, password) {
     const connection = await this.getConnection();
     try {
-      const params = [];
+      // const params = [];
+      const fields = [];
+      const values = [];
+
       if (password) {
         const hashedPassword = await bcrypt.hash(password, 10);
-        params.push(`password='${hashedPassword}'`);
+        fields.push("password = ?");
+        values.push(hashedPassword);
+        // params.push(`password='${hashedPassword}'`);
       }
       if (email) {
-        params.push(`email='${email}'`);
+        fields.push("email = ?");
+        values.push(email);
+        // params.push(`email='${email}'`);
       }
-      if (params.length > 0) {
-        const query = `UPDATE user SET ${params.join(", ")} WHERE id=${userId}`;
-        await this.query(connection, query);
+      if (fields.length > 0) {
+        values.push(userId); // for the WHERE clause
+        const query = `UPDATE user SET ${fields.join(", ")} WHERE id = ?`;
+        await this.query(connection, query, values);
+
+        // const query = `UPDATE user SET ${params.join(", ")} WHERE id=${userId}`;
+        // await this.query(connection, query);
       }
 
       return this.getUser(email, password);
@@ -321,9 +332,14 @@ class DB {
       }
 
       franchiseIds = franchiseIds.map((v) => v.objectId);
+      const placeholders = franchiseIds.map(() => "?").join(", ");
+      // const franchises = await this.query(
+      //   connection,
+      //   `SELECT id, name FROM franchise WHERE id in (${franchiseIds.join(",")})`
+      // );
       const franchises = await this.query(
         connection,
-        `SELECT id, name FROM franchise WHERE id in (${franchiseIds.join(",")})`
+        `SELECT id, name FROM franchise WHERE id in (${placeholders})`
       );
       for (const franchise of franchises) {
         await this.getFranchise(franchise);
@@ -455,9 +471,9 @@ class DB {
 
         if (!dbExists) {
           const defaultAdmin = {
-            name: "常用名字",
-            email: "a@jwt.com",
-            password: "admin",
+            name: config.defaultAdmin.name, // "常用名字",
+            email: config.defaultAdmin.email, // "a@jwt.com",
+            password: config.defaultAdmin.password, //"admin",
             roles: [{ role: Role.Admin }],
           };
           this.addUser(defaultAdmin);

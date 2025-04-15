@@ -22,24 +22,24 @@ trap cleanup SIGINT
 while true; do
   curl -s "$host/api/order/menu" > /dev/null
   echo "Requesting menu..."
-  sleep 3
+  sleep 120
 done &
 pid1=$!
 
 # Simulate a user with an invalid email and password every 25 seconds
-while true; do
-  curl -s -X PUT "$host/api/auth" -d '{"email":"unknown@jwt.com", "password":"bad"}' -H 'Content-Type: application/json' > /dev/null
-  echo "Logging in with invalid credentials..."
-  sleep 25
-done &
-pid2=$!
+# while true; do
+#  curl -s -X PUT "$host/api/auth" -d '{"email":"unknown@jwt.com", "password":"bad"}' -H 'Content-Type: application/json' > /dev/null
+#  echo "Logging in with invalid credentials..."
+#  sleep 25
+#done &
+#pid2=$!
 
 # Simulate a franchisee logging in every two minutes
 while true; do
   response=$(curl -s -X PUT $host/api/auth -d '{"email":"f@jwt.com", "password":"franchisee"}' -H 'Content-Type: application/json')
   token=$(echo $response | jq -r '.token')
   echo "Login franchisee..."
-  sleep 110
+  sleep 30
   curl -s -X DELETE $host/api/auth -H "Authorization: Bearer $token" > /dev/null
   echo "Logging out franchisee..."
   sleep 10
@@ -53,13 +53,13 @@ while true; do
   echo "Login diner..."
   curl -s -X POST $host/api/order -H 'Content-Type: application/json' -d '{"franchiseId": 1, "storeId":1, "items":[{ "menuId": 1, "description": "Veggie", "price": 0.05 }]}'  -H "Authorization: Bearer $token" > /dev/null
   echo "Bought a pizza..."
-  sleep 20
+  sleep 5
   curl -s -X DELETE $host/api/auth -H "Authorization: Bearer $token" > /dev/null
   echo "Logging out diner..."
-  sleep 30
+  sleep 2
 done &
 pid4=$!
 
 
 # Wait for the background processes to complete
-wait $pid1 $pid2 $pid3 $pid4
+wait $pid1 $pid2 $pid4 # $pid3

@@ -65,6 +65,11 @@ jobs:
               userId: ${{ secrets.LOGGING_USER_ID }},
               url: '${{ secrets.LOGGING_URL }}',
               apiKey: '${{ secrets.LOGGING_API_KEY }}',
+            },
+            defaultAdmin: {
+              name: '${{ secrets.DEFAULT_ADMIN_NAME }}',
+              email: '${{ secrets.DEFAULT_ADMIN_EMAIL }}',
+              password: '${{ secrets.DEFAULT_ADMIN_PASSWORD }}'
             },            
           };" > src/config.js
 
@@ -143,3 +148,10 @@ jobs:
       - name: Deploy new container
         run: |
           aws ecs update-service --cluster jwt-pizza-service --service jwt-pizza-service --force-new-deployment
+
+      - name: Annotate deployment in Grafana
+        run: |
+          curl -s -X POST https://connornesbit.grafana.net/api/annotations \
+            -H "Authorization: Bearer ${{ secrets.GRAFANA_ACCESS_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"dashboardUID":"feg6axll8da0wb", "panelId":10, "tags":["backend","production"], "text":"Version '"$version"' deployed" }'
